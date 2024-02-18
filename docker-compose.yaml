@@ -1,0 +1,71 @@
+services:
+  # prometheus:
+  #   image: prom/prometheus
+  #   container_name: prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #   ports:
+  #     - 9090:9090
+  #   restart: unless-stopped
+  #   volumes:
+  #     # - ./prometheus:/etc/prometheus
+  #     - prom_data:/prometheus
+  mf_flyway:
+    image: flyway/flyway:10.4
+    container_name: flyway
+    # yamllint disable rule:line-length
+    command: |
+      -url=jdbc:postgresql://mf_db/mf?allowPublicKeyRetrieval=true \
+        -schemas=public \
+        -user=postgres -password=root -connectRetries=60 \
+        -connectRetriesInterval=2 migrate
+    # yamllint enable rule:line-length
+    volumes:
+      - ./data/schema/migration:/flyway/sql
+    depends_on:
+      - mf_db
+
+  mf_db:
+    # Currently Cloud SQL default postgres version is 15
+    # https://cloud.google.com/sql/docs/postgres/db-versions
+    image: postgres:15
+    container_name: mf_db
+    restart: always
+    volumes:
+      - local_pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: root
+      POSTGRES_USER: postgres
+      POSTGRES_DB: mf
+    ports:
+      - "6543:5432"
+  
+  mf_app:
+    container_name: mf_app
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    ports:
+      - "6080:8080"
+    environment:
+      - APP_ENV=docker
+    depends_on:
+      - mf_db
+    volumes:
+      - ./:/app
+      - /tmp:/go/pkg/mod
+
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: grafana
+  #   ports:
+  #     - 3000:3000
+  #   restart: unless-stopped
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin@123
+    # volumes:
+    #   - ./grafana:/etc/grafana/provisioning/datasources
+volumes:
+  # prom_data:
+  local_pgdata:
